@@ -1,0 +1,16 @@
+name: Run Python Script
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-script:
+    runs-on: self-hosted
+
+    steps:
+      - name: Run Python script in WSL
+        shell: powershell
+        run: |
+          wsl.exe -- bash -lc 'chmod +x /home/ubuntu/src/'
+          wsl.exe -- bash -lc 'cd /home/ubuntu/src'
+          wsl.exe -- bash -lc 'git clone git@github.com:Allplan-GmbH/SDS2Prod-sds2.git 2026.06'
