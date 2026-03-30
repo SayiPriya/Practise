@@ -1,43 +1,29 @@
-name: Run Python Script
-
-on:
-  workflow_dispatch:  
-   inputs:
-      release_version:
-        description: "Release folder name (e.g. 2026.06)"
-        required: true
-        type: string
-
-
 jobs:
   prepare-release:
     runs-on: self-hosted
 
     steps:
-       name: Initialize WSL workspace
+      - name: Initialize WSL workspace
+        id: clone_repo
         shell: powershell
-        run: |          
+        run: |
           # Store the version input
-            $ver = "${{ github.event.inputs.release_version }}"  
-            echo "RELEASE_VERSION=$ver" >> $env:GITHUB_OUTPUT 
-            wsl.exe bash -lc "
-              cd ~/src &&
-              git clone git@github.com:Allplan-GmbH/SDS2Prod-sds2.git $ver
-            "
-            echo "RELEASE_VERSION=$ver" >> $env:GITHUB_OUTPUT
+          $ver = "${{ github.event.inputs.release_version }}"
+          echo "RELEASE_VERSION=$ver" >> $env:GITHUB_OUTPUT
 
-          
-      name: Verify clone location
-              shell: powershell
-              run: |
-                $ver = "${{ steps.clone_repo.outputs.RELEASE_VERSION }}"
-                wsl.exe bash -lc "
-                  echo 'Showing contents of ~/src:' &&
-                  ls -al ~/src &&
-                  echo '' &&
-                  echo 'Showing contents of ~/src/'$ver':' &&
-                  ls -al ~/src/$ver
-                "
+          wsl.exe bash -lc "
+            cd ~/src &&
+            git clone git@github.com:Allplan-GmbH/SDS2Prod-sds2.git $ver
+          "
 
-
-          
+      - name: Verify clone location
+        shell: powershell
+        run: |
+          $ver = "${{ steps.clone_repo.outputs.RELEASE_VERSION }}"
+          wsl.exe bash -lc "
+            echo 'Showing contents of ~/src:' &&
+            ls -al ~/src &&
+            echo '' &&
+            echo 'Showing contents of ~/src/'$ver':' &&
+            ls -al ~/src/$ver
+          "
