@@ -20,7 +20,6 @@ jobs:
           # Store the version input
           $ver = "${{ github.event.inputs.release_version }}"
           echo "RELEASE_VERSION=$ver" >> $env:GITHUB_OUTPUT
-
           wsl.exe bash -lc "
               set -e
               cd ~/src
@@ -73,5 +72,4 @@ jobs:
             echo '' &&
             echo 'Showing contents of ~/src/'$ver':' &&
             chmod g+w $ver &&
-            ls -al ~/src/$ver
-          "
+            ls -al ~/src/$ver "          "
