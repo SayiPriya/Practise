@@ -1,19 +1,44 @@
 name: Run Python Script
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  
+   inputs:
+      release_version:
+        description: "Release folder name (e.g. 2026.06)"
+        required: true
+        type: string
+
 
 jobs:
-  run-script:
+  prepare-release:
     runs-on: self-hosted
 
     steps:
-      - name: Run Python script in WSL
+       name: Initialize WSL workspace
+        id: init
         shell: powershell
-        run: |
-          wsl.exe -- bash -lc 'chmod +x /home/ubuntu/src/'
-          wsl.exe -- bash -lc 'cd /home/ubuntu/src'
-          wsl.exe -- bash -lc 'git clone git@github.com:Allplan-GmbH/SDS2Prod-sds2.git 2026.06'
-          wsl.exe -- bash -lc 'cd 2026.06'
-          wsl.exe -- bash -lc './install_src/UpdateEULA.py'
+        run: |          
+          # Store the version input
+            $ver = "${{ github.event.inputs.release_version }}"  
+            echo "RELEASE_VERSION=$ver" >> $env:GITHUB_OUTPUT 
+            wsl.exe bash -lc "
+              cd ~/src &&
+              git clone git@github.com:Allplan-GmbH/SDS2Prod-sds2.git $ver
+            "
+            echo "RELEASE_VERSION=$ver" >> $env:GITHUB_OUTPUT
+
+          
+      name: Verify clone location
+              shell: powershell
+              run: |
+                $ver = "${{ steps.clone_repo.outputs.RELEASE_VERSION }}"
+                wsl.exe bash -lc "
+                  echo 'Showing contents of ~/src:' &&
+                  ls -al ~/src &&
+                  echo '' &&
+                  echo 'Showing contents of ~/src/'$ver':' &&
+                  ls -al ~/src/$ver
+                "
+
+
           
