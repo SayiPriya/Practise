@@ -1,3 +1,13 @@
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Release folder name (e.g. 2026.06)"
+        required: true
+        type: string
+
+
 jobs:
   prepare-release:
     runs-on: self-hosted
@@ -14,16 +24,4 @@ jobs:
           wsl.exe bash -lc "
             cd ~/src &&
             git clone git@github.com:Allplan-GmbH/SDS2Prod-sds2.git $ver
-          "
-
-      - name: Verify clone location
-        shell: powershell
-        run: |
-          $ver = "${{ steps.clone_repo.outputs.RELEASE_VERSION }}"
-          wsl.exe bash -lc "
-            echo 'Showing contents of ~/src:' &&
-            ls -al ~/src &&
-            echo '' &&
-            echo 'Showing contents of ~/src/'$ver':' &&
-            ls -al ~/src/$ver
           "
