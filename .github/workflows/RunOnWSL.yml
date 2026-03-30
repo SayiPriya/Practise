@@ -35,5 +35,6 @@ jobs:
             ls -al ~/src &&
             echo '' &&
             echo 'Showing contents of ~/src/'$ver':' &&
+            chmod g+w $ver &&
             ls -al ~/src/$ver
           "
