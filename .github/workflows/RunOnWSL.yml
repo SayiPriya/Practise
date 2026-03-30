@@ -15,7 +15,6 @@ jobs:
 
     steps:
        name: Initialize WSL workspace
-        id: init
         shell: powershell
         run: |          
           # Store the version input
