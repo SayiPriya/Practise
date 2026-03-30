@@ -72,4 +72,4 @@ jobs:
             echo '' &&
             echo 'Showing contents of ~/src/'$ver':' &&
             chmod g+w $ver &&
-            ls -al ~/src/$ver "          "
+            ls -al ~/src/$ver "      
