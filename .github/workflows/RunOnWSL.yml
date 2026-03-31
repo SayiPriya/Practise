@@ -20,8 +20,6 @@ jobs:
           $ver = "${{ github.event.inputs.release_version }}"
           echo "RELEASE_VERSION=$ver" >> $env:GITHUB_OUTPUT
 
-          $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-
           $bashScript = @'
           set -e
 
@@ -49,15 +47,24 @@ jobs:
           '@ -replace '__VER__', $ver -replace "`r`n", "`n"
 
           echo ">>> Bash script to execute:`n$bashScript"
-          $bashScript | wsl.exe bash -l
+
+          $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+          $tempFile = [System.IO.Path]::GetTempFileName()
+          [System.IO.File]::WriteAllText($tempFile, $bashScript, $utf8NoBom)
+          $drive = $tempFile.Substring(0,1).ToLower()
+          $wslPath = "/mnt/$drive" + $tempFile.Substring(2).Replace('\','/')
+          try {
+            wsl.exe bash -l $wslPath
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+          }
 
       - name: Verify clone location
         id: verify
         shell: powershell
         run: |
           $ver = "${{ steps.clone_repo.outputs.RELEASE_VERSION }}"
-
-          $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
           $bashScript = @'
           echo 'Contents of ~/src:'
@@ -69,4 +76,15 @@ jobs:
           '@ -replace '__VER__', $ver -replace "`r`n", "`n"
 
           echo ">>> Bash script to execute:`n$bashScript"
-          $bashScript | wsl.exe bash -l
+
+          $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+          $tempFile = [System.IO.Path]::GetTempFileName()
+          [System.IO.File]::WriteAllText($tempFile, $bashScript, $utf8NoBom)
+          $drive = $tempFile.Substring(0,1).ToLower()
+          $wslPath = "/mnt/$drive" + $tempFile.Substring(2).Replace('\','/')
+          try {
+            wsl.exe bash -l $wslPath
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+          }
