@@ -75,3 +75,36 @@ jobs:
           $ver = "${{ github.event.inputs.release_version }}"
           $verMaj = "${{ github.event.inputs.version_major }}"
           wsl.exe bash -l .github/scripts/02-verify-release.sh $ver $verMaj
+          
+# ─── Phase 3: EULA check and auto-update if needed ─────────────
+  eula:
+    name: "Phase 3 - EULA Check & Update"
+    needs: verify
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check EULA Status
+        id: eula_check
+        shell: powershell
+        run: |
+          $ver = "${{ github.event.inputs.release_version }}"
+          wsl.exe bash -l .github/scripts/03-check-eula.sh $ver
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -eq 2) {
+            echo "EULA_NEEDS_UPDATE=true" >> $env:GITHUB_OUTPUT
+          } elseif ($exitCode -eq 0) {
+            echo "EULA_NEEDS_UPDATE=false" >> $env:GITHUB_OUTPUT
+          } else {
+            exit $exitCode
+          }
+
+      - name: Update EULA (if needed)
+        if: steps.eula_check.outputs.EULA_NEEDS_UPDATE == 'true'
+        shell: powershell
+        run: |
+          $ver = "${{ github.event.inputs.release_version }}"
+          $task = "${{ github.event.inputs.release_task_number }}"
+          echo ">>> EULAs differ. Running auto-update..."
+          wsl.exe bash -l .github/scripts/04-update-eula.sh $ver $task
+
