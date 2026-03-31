@@ -20,20 +20,22 @@ jobs:
           $ver = "${{ github.event.inputs.release_version }}"
           echo "RELEASE_VERSION=$ver" >> $env:GITHUB_OUTPUT
 
-          $bashScript = @"
+          $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+
+          $bashScript = @'
           set -e
 
           cd ~/src
 
-          if [ ! -d "$ver" ]; then
+          if [ ! -d "__VER__" ]; then
             echo '>>> Directory does not exist. Cloning fresh repository...'
-            git clone git@github.com:Allplan-GmbH/SDS2Prod-sds2.git "$ver"
-            cd "$ver"
+            git clone git@github.com:Allplan-GmbH/SDS2Prod-sds2.git "__VER__"
+            cd "__VER__"
             echo '>>> Initializing submodules...'
             git submodule update --init --recursive
           else
             echo '>>> Directory exists. Performing advanced update...'
-            cd "$ver"
+            cd "__VER__"
 
             if [ ! -d .git ]; then
               echo 'ERROR: Directory exists but is not a git repository!'
@@ -62,8 +64,9 @@ jobs:
             echo '>>> Submodule status:'
             git submodule status
           fi
-          "@ -replace '^\s+', '' -replace '\uFEFF','' -replace "`r`n", "`n"
+          '@ -replace '__VER__', $ver -replace "`r`n", "`n"
 
+          echo ">>> Bash script to execute:`n$bashScript"
           $bashScript | wsl.exe bash -l
 
       - name: Verify clone location
@@ -72,13 +75,16 @@ jobs:
         run: |
           $ver = "${{ steps.clone_repo.outputs.RELEASE_VERSION }}"
 
-          $bashScript = @"
+          $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+
+          $bashScript = @'
           echo 'Contents of ~/src:'
           ls -al ~/src
           echo ''
-          echo "Contents of ~/src/$ver:"
-          chmod g+w ~/src/$ver
-          ls -al ~/src/$ver
-          "@ -replace '^\s+', '' -replace '\uFEFF','' -replace "`r`n", "`n"
+          echo "Contents of ~/src/__VER__:"
+          chmod g+w ~/src/__VER__
+          ls -al ~/src/__VER__
+          '@ -replace '__VER__', $ver -replace "`r`n", "`n"
 
+          echo ">>> Bash script to execute:`n$bashScript"
           $bashScript | wsl.exe bash -l
