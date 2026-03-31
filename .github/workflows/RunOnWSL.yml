@@ -1,3 +1,4 @@
+name: Run On WSL
 
 on:
   workflow_dispatch:
@@ -7,69 +8,73 @@ on:
         required: true
         type: string
 
-
 jobs:
   prepare-release:
     runs-on: self-hosted
 
     steps:
-      - name: Initialize WSL workspace
+      - name: Initialize / Update Release Repo
         id: clone_repo
         shell: powershell
         run: |
-          # Store the version input
           $ver = "${{ github.event.inputs.release_version }}"
           echo "RELEASE_VERSION=$ver" >> $env:GITHUB_OUTPUT
+
           wsl.exe bash -lc "
-              set -e
-              cd ~/src
-              if [ ! -d \"$ver\" ]; then
-                  echo '>>> Directory does not exist. Cloning fresh repository...'
-                  git clone git@github.com:Allplan-GmbH/SDS2Prod-sds2.git \"$ver\"
-                  cd \"$ver\"
-                  echo '>>> Initializing submodules...'
-                  git submodule update --init --recursive
-              else
-                  echo '>>> Directory exists. Performing advanced update...'
-                  cd \"$ver\"
-          
-                  if [ ! -d .git ]; then
-                    echo 'ERROR: Directory exists but is not a git repository!'
-                    exit 1
-                  fi
-              
-                  echo '>>> Fetching latest changes...'
-                  git fetch --all
-          
-                  echo '>>> Checking current branch...'
-                  CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-                  echo \"Current branch: \$CURRENT_BRANCH\"
-          
-                  echo '>>> Ensuring branch is tracking upstream...'
-                  git branch --set-upstream-to=\"origin/\$CURRENT_BRANCH\" || true
-          
-                  echo '>>> Resetting to upstream HEAD...'
-                  git reset --hard \"origin/\$CURRENT_BRANCH\"
-          
-                  echo '>>> Cleaning untracked files...'
-                  git clean -fd
-          
-                  echo '>>> Updating submodules...'
-                  git submodule update --init --recursive
-          
-                  echo '>>> Submodule status:'
-                  git submodule status
-              fi "
-          
+            set -e
+
+            cd ~/src
+
+            if [ ! -d \"$ver\" ]; then
+              echo '>>> Directory does not exist. Cloning fresh repository...'
+              git clone git@github.com:Allplan-GmbH/SDS2Prod-sds2.git \"$ver\"
+              cd \"$ver\"
+              echo '>>> Initializing submodules...'
+              git submodule update --init --recursive
+            else
+              echo '>>> Directory exists. Performing advanced update...'
+              cd \"$ver\"
+
+              if [ ! -d .git ]; then
+                echo 'ERROR: Directory exists but is not a git repository!'
+                exit 1
+              fi
+
+              echo '>>> Fetching latest changes...'
+              git fetch --all
+
+              echo '>>> Checking current branch...'
+              CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+              echo \"Current branch: \$CURRENT_BRANCH\"
+
+              echo '>>> Ensuring branch is tracking upstream...'
+              git branch --set-upstream-to=\"origin/\$CURRENT_BRANCH\" || true
+
+              echo '>>> Resetting to upstream HEAD...'
+              git reset --hard \"origin/\$CURRENT_BRANCH\"
+
+              echo '>>> Cleaning untracked files...'
+              git clean -fd
+
+              echo '>>> Updating submodules...'
+              git submodule update --init --recursive
+
+              echo '>>> Submodule status:'
+              git submodule status
+            fi
+          "
+
       - name: Verify clone location
-        id: Verify_Cloned_Repo
+        id: verify
         shell: powershell
         run: |
           $ver = "${{ steps.clone_repo.outputs.RELEASE_VERSION }}"
+
           wsl.exe bash -lc "
-            echo 'Showing contents of ~/src:' &&
-            ls -al ~/src &&
-            echo '' &&
-            echo 'Showing contents of ~/src/'$ver':' &&
-            chmod g+w $ver &&
-            ls -al ~/src/$ver "      
+            echo 'Contents of ~/src:'
+            ls -al ~/src
+            echo ''
+            echo 'Contents of ~/src/'$ver':'
+            chmod g+w ~/src/$ver
+            ls -al ~/src/$ver
+          "
