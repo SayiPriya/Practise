@@ -62,7 +62,7 @@ jobs:
             echo '>>> Submodule status:'
             git submodule status
           fi
-          "@ -replace "`r`n", "`n"
+          "@ -replace "`r`n", "`n" -replace '^\uFEFF', ''
 
           $bashScript | wsl.exe bash -l
 
@@ -79,6 +79,6 @@ jobs:
           echo 'Contents of ~/src/$ver:'
           chmod g+w ~/src/$ver
           ls -al ~/src/$ver
-          "@ -replace "`r`n", "`n"
+          "@ -replace "`r`n", "`n" -replace '^\uFEFF', ''
 
           $bashScript | wsl.exe bash -l
