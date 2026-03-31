@@ -44,14 +44,14 @@ jobs:
             git fetch --all
 
             echo '>>> Checking current branch...'
-            CURRENT_BRANCH=`$(git rev-parse --abbrev-ref HEAD)
-            echo "Current branch: `$CURRENT_BRANCH"
+            CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+            echo "Current branch: $CURRENT_BRANCH"
 
             echo '>>> Ensuring branch is tracking upstream...'
-            git branch --set-upstream-to="origin/`$CURRENT_BRANCH" || true
+            git branch --set-upstream-to="origin/$CURRENT_BRANCH" || true
 
             echo '>>> Resetting to upstream HEAD...'
-            git reset --hard "origin/`$CURRENT_BRANCH"
+            git reset --hard "origin/$CURRENT_BRANCH"
 
             echo '>>> Cleaning untracked files...'
             git clean -fd
@@ -62,7 +62,7 @@ jobs:
             echo '>>> Submodule status:'
             git submodule status
           fi
-          "@ -replace "`r`n", "`n" -replace '^\uFEFF', ''
+          "@ -replace '^\s+', '' -replace '\uFEFF','' -replace "`r`n", "`n"
 
           $bashScript | wsl.exe bash -l
 
@@ -76,9 +76,9 @@ jobs:
           echo 'Contents of ~/src:'
           ls -al ~/src
           echo ''
-          echo 'Contents of ~/src/$ver:'
+          echo "Contents of ~/src/$ver:"
           chmod g+w ~/src/$ver
           ls -al ~/src/$ver
-          "@ -replace "`r`n", "`n" -replace '^\uFEFF', ''
+          "@ -replace '^\s+', '' -replace '\uFEFF','' -replace "`r`n", "`n"
 
           $bashScript | wsl.exe bash -l
