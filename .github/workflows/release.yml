@@ -1,0 +1,75 @@
+name: SDS2 Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Release version (e.g. 2026.07)"
+        required: true
+        type: string
+      version_major:
+        description: "Major version (e.g. 2026)"
+        required: true
+        type: string
+      branch_override:
+        description: "Branch to checkout (leave empty for default)"
+        required: false
+        type: string
+      release_task_number:
+        description: "Task number for commits (e.g. RLC-1234)"
+        required: true
+        type: string
+      rc_number:
+        description: "Release candidate number (e.g. 1)"
+        required: true
+        type: string
+        default: "1"
+      special_version:
+        description: "Special version string, no spaces (e.g. 2026-Beta-1)"
+        required: false
+        type: string
+      commit_ref:
+        description: "Commit ref for release branch (leave empty for HEAD)"
+        required: false
+        type: string
+      is_real_release:
+        description: "Real release? (adds -r flag for signing)"
+        required: true
+        type: boolean
+        default: false
+      build_education:
+        description: "Build education version? (adds -E flag)"
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+  # ─── Phase 1: Clone or update the repo ──────────────────────────
+  setup:
+    name: "Phase 1 - Clone / Update Repo"
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone or Update Release Repo
+        shell: powershell
+        run: |
+          $ver = "${{ github.event.inputs.release_version }}"
+          $branch = "${{ github.event.inputs.branch_override }}"
+          echo "RELEASE_VERSION=$ver" >> $env:GITHUB_OUTPUT
+          wsl.exe bash -l .github/scripts/01-clone-or-update.sh $ver $branch
+
+  # ─── Phase 2: Verify prerequisites (human reviews output) ──────
+  verify:
+    name: "Phase 2 - Verify Release Prerequisites"
+    needs: setup
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify Branch, Version, and Tags
+        shell: powershell
+        run: |
+          $ver = "${{ github.event.inputs.release_version }}"
+          $verMaj = "${{ github.event.inputs.version_major }}"
+          wsl.exe bash -l .github/scripts/02-verify-release.sh $ver $verMaj
