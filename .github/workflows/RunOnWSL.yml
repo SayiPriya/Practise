@@ -45,25 +45,7 @@ jobs:
             echo '>>> Fetching latest changes...'
             git fetch --all
 
-            echo '>>> Checking current branch...'
-            CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-            echo "Current branch: $CURRENT_BRANCH"
-
-            echo '>>> Ensuring branch is tracking upstream...'
-            git branch --set-upstream-to="origin/$CURRENT_BRANCH" || true
-
-            echo '>>> Resetting to upstream HEAD...'
-            git reset --hard "origin/$CURRENT_BRANCH"
-
-            echo '>>> Cleaning untracked files...'
-            git clean -fd
-
-            echo '>>> Updating submodules...'
-            git submodule update --init --recursive
-
-            echo '>>> Submodule status:'
-            git submodule status
-          fi
+           fi
           '@ -replace '__VER__', $ver -replace "`r`n", "`n"
 
           echo ">>> Bash script to execute:`n$bashScript"
