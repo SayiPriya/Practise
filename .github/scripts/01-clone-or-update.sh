@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Phase 1: Clone a fresh repo or update an existing one
-# Usage: 01-clone-or-update.sh <release_version> [branch_override]
+# Usage: 01-clone-or-update.sh <release_version> [branch_to_checkout]
 # Example: 01-clone-or-update.sh 2026.07
 set -e
 
 VER="$1"
-TARGET_BRANCH="sds2_2026_1"
+TARGET_BRANCH="${2:-sds2_2026_1}"
 
 if [ -z "$VER" ]; then
   echo "ERROR: Release version is required."
-  echo "Usage: $0 <release_version> [branch_override]"
+  echo "Usage: $0 <release_version> [branch_to_checkout]"
   exit 1
 fi
 
