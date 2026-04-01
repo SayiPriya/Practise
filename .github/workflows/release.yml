@@ -44,7 +44,7 @@ on:
         default: false
 
 jobs:
-  # ─── Phase 1: Clone or update the repo ──────────────────────────
+  # --- Phase 1: Clone or update the repo --------------------------
   setup:
     name: "Phase 1 - Clone / Update Repo"
     runs-on: self-hosted
@@ -52,16 +52,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           clean: false
-          
+
       - name: Clone or Update Release Repo
         shell: powershell
         run: |
-          $ver = "${{ github.event.inputs.release_version }}"
-          $branch = "${{ github.event.inputs.branch_override }}"
+          $ver = "${{ inputs.release_version }}"
+          $branch = "${{ inputs.branch_override }}"
+          if ([string]::IsNullOrWhiteSpace($branch)) {
+            $branch = "sds2_2026_1"
+          }
+          echo ">>> Requested release version: [$ver]"
+          echo ">>> Requested checkout branch: [$branch]"
           echo "RELEASE_VERSION=$ver" >> $env:GITHUB_OUTPUT
-          wsl.exe bash -l .github/scripts/01-clone-or-update.sh $ver $branch
+          wsl.exe bash -lc ".github/scripts/01-clone-or-update.sh '$ver' '$branch'"
 
-  # ─── Phase 2: Verify prerequisites (human reviews output) ──────
+  # --- Phase 2: Verify prerequisites (human reviews output) ------
   verify:
     name: "Phase 2 - Verify Release Prerequisites"
     needs: setup
@@ -75,8 +80,8 @@ jobs:
           $ver = "${{ github.event.inputs.release_version }}"
           $verMaj = "${{ github.event.inputs.version_major }}"
           wsl.exe bash -l .github/scripts/02-verify-release.sh $ver $verMaj
-          
-# ─── Phase 3: EULA check and auto-update if needed ─────────────
+
+  # --- Phase 3: EULA check and auto-update if needed -------------
   eula:
     name: "Phase 3 - EULA Check & Update"
     needs: verify
@@ -111,7 +116,7 @@ jobs:
           echo ">>> EULAs differ. Running auto-update..."
           wsl.exe bash -l .github/scripts/04-update-eula.sh $ver $task
 
- # --- Phase 4: Tag release candidate ----------------------------
+  # --- Phase 4: Tag release candidate ----------------------------
   tag:
     name: "Phase 4 - Create RC Tag"
     needs: eula
@@ -141,11 +146,28 @@ jobs:
           $ref = "${{ github.event.inputs.commit_ref }}"
           wsl.exe bash -l .github/scripts/06-create-branch.sh $ver $ref
 
- 
+  # --- Phase 6: Code Signing (Windows native, not WSL) -----------
+  code-sign:
+    name: "Phase 6 - Activate Code Signing"
+    needs: branch
+    runs-on: self-hosted
+    steps:
+      - name: Verify Code Signing Certificate
+        shell: powershell
+        run: |
+          echo ">>> Verifying EV code signing certificate..."
+          if (Test-Path "c:\distrib_serials\bin\do_sign_anybin.bat") {
+            & cmd /c "c:\distrib_serials\bin\do_sign_anybin.bat c:\distrib_serials\exe\test_sign.exe"
+            echo ">>> Code signing check complete."
+          } else {
+            echo "WARNING: do_sign_anybin.bat not found at expected path."
+            echo "Ensure the code signing certificate is active before proceeding."
+          }
+
   # --- Phase 7: Build the release --------------------------------
   build:
     name: "Phase 7 - Build Release"
-    needs: branch
+    needs: code-sign
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
@@ -166,5 +188,3 @@ jobs:
           echo ">>> Build flags: $flagStr"
 
           wsl.exe bash -l .github/scripts/07-build-release.sh $ver $flagStr
-
-
