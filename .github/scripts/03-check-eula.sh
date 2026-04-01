@@ -39,8 +39,9 @@ fi
 echo "$EULA_OUTPUT"
 echo ""
 
-# Check if output contains "differ" (case-insensitive)
-if echo "$EULA_OUTPUT" | grep -qi "differ"; then
+# Check if output contains "differ" (case-insensitive) without relying on grep exit codes.
+EULA_OUTPUT_LC=$(printf '%s' "$EULA_OUTPUT" | tr '[:upper:]' '[:lower:]')
+if [[ "$EULA_OUTPUT_LC" == *"differ"* ]]; then
   echo "============================================="
   echo "  RESULT: EULAs DIFFER — update is needed"
   echo "============================================="
