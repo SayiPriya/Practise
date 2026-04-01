@@ -16,6 +16,20 @@ fi
 
 cd ~/src/"$VER"
 
+# Delete local branch if it already exists
+if git show-ref --verify --quiet "refs/heads/$VER"; then
+  echo ">>> Local branch '$VER' already exists. Deleting it..."
+  git checkout HEAD --detach 2>/dev/null || true   # detach so we can delete current branch if needed
+  git branch -D "$VER"
+fi
+
+# Delete remote branch if it already exists
+if git ls-remote --exit-code --heads origin "$VER" > /dev/null 2>&1; then
+  echo ">>> Remote branch '$VER' already exists. Deleting it..."
+  git push origin --delete "$VER"
+fi
+
+# Create the branch
 if [ -n "$COMMIT_REF" ]; then
   echo ">>> Creating release branch '$VER' from commit: $COMMIT_REF"
   git checkout -b "$VER" "$COMMIT_REF"
