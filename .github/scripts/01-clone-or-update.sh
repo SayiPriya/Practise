@@ -2,11 +2,10 @@
 # Phase 1: Clone a fresh repo or update an existing one
 # Usage: 01-clone-or-update.sh <release_version> [branch_override]
 # Example: 01-clone-or-update.sh 2026.07
-#          01-clone-or-update.sh 2026.07 production
 set -e
 
 VER="$1"
-BRANCH_OVERRIDE="${2:-}"
+TARGET_BRANCH="sds2_2026_1"
 
 if [ -z "$VER" ]; then
   echo "ERROR: Release version is required."
@@ -21,9 +20,11 @@ if [ ! -d "$VER" ]; then
   git clone git@github.com:Allplan-GmbH/SDS2Prod-sds2.git "$VER"
   cd "$VER"
 
-  if [ -n "$BRANCH_OVERRIDE" ]; then
-    echo ">>> Checking out branch: $BRANCH_OVERRIDE"
-    git checkout -t "remotes/origin/$BRANCH_OVERRIDE"
+  echo ">>> Ensuring target branch: $TARGET_BRANCH"
+  if git show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
+    git checkout "$TARGET_BRANCH"
+  else
+    git checkout -t "remotes/origin/$TARGET_BRANCH"
   fi
 
   echo ">>> Initializing submodules..."
@@ -43,11 +44,20 @@ else
   CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
   echo ">>> Current branch: $CURRENT_BRANCH"
 
+  if [ "$CURRENT_BRANCH" != "$TARGET_BRANCH" ]; then
+    echo ">>> Switching to target branch: $TARGET_BRANCH"
+    if git show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
+      git checkout "$TARGET_BRANCH"
+    else
+      git checkout -t "remotes/origin/$TARGET_BRANCH"
+    fi
+  fi
+
   echo ">>> Ensuring branch is tracking upstream..."
-  git branch --set-upstream-to="origin/$CURRENT_BRANCH" || true
+  git branch --set-upstream-to="origin/$TARGET_BRANCH" || true
 
   echo ">>> Resetting to upstream HEAD..."
-  git reset --hard "origin/$CURRENT_BRANCH"
+  git reset --hard "origin/$TARGET_BRANCH"
 
   echo ">>> Cleaning untracked files..."
   git clean -fd
