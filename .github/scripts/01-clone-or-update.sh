@@ -14,6 +14,7 @@ if [ -z "$VER" ]; then
 fi
 
 cd ~/src
+echo ">>> Requested target branch: $TARGET_BRANCH"
 
 if [ ! -d "$VER" ]; then
   echo ">>> Directory does not exist. Cloning fresh repository..."
