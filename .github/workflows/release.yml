@@ -145,7 +145,7 @@ jobs:
   # --- Phase 7: Build the release --------------------------------
   build:
     name: "Phase 7 - Build Release"
- #   needs: code-sign
+    needs: branch
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
