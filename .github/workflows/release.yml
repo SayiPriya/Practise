@@ -111,3 +111,60 @@ jobs:
           echo ">>> EULAs differ. Running auto-update..."
           wsl.exe bash -l .github/scripts/04-update-eula.sh $ver $task
 
+ # --- Phase 4: Tag release candidate ----------------------------
+  tag:
+    name: "Phase 4 - Create RC Tag"
+    needs: eula
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Release Candidate Tag
+        shell: powershell
+        run: |
+          $ver = "${{ github.event.inputs.release_version }}"
+          $rc = "${{ github.event.inputs.rc_number }}"
+          wsl.exe bash -l .github/scripts/05-tag-release.sh $ver $rc
+
+  # --- Phase 5: Create release branch ----------------------------
+  branch:
+    name: "Phase 5 - Create Release Branch"
+    needs: tag
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Release Branch
+        shell: powershell
+        run: |
+          $ver = "${{ github.event.inputs.release_version }}"
+          $ref = "${{ github.event.inputs.commit_ref }}"
+          wsl.exe bash -l .github/scripts/06-create-branch.sh $ver $ref
+
+ 
+  # --- Phase 7: Build the release --------------------------------
+  build:
+    name: "Phase 7 - Build Release"
+ #   needs: code-sign
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Release
+        shell: powershell
+        run: |
+          $ver = "${{ github.event.inputs.release_version }}"
+          $flags = @()
+
+          $special = "${{ github.event.inputs.special_version }}"
+          if ($special) { $flags += "-V"; $flags += "`"$special`"" }
+
+          if ("${{ github.event.inputs.is_real_release }}" -eq "true") { $flags += "-r" }
+          if ("${{ github.event.inputs.build_education }}" -eq "true") { $flags += "-E" }
+
+          $flagStr = $flags -join " "
+          echo ">>> Build flags: $flagStr"
+
+          wsl.exe bash -l .github/scripts/07-build-release.sh $ver $flagStr
+
+
