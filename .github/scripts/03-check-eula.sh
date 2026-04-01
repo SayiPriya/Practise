@@ -7,7 +7,6 @@
 #   0 = EULAs match (no update needed)
 #   2 = EULAs differ (update needed)
 #   1 = error
-set -e
 
 VER="$1"
 
@@ -17,20 +16,21 @@ if [ -z "$VER" ]; then
   exit 1
 fi
 
-cd ~/src/"$VER"
+cd ~/src/"$VER" || exit 1
 
 echo "============================================="
 echo "  EULA CHECK: $VER"
 echo "============================================="
 echo ""
 
-# Capture output from UpdateEULA
+# Run UpdateEULA and capture output
+EULA_OUTPUT=""
 if [ -f "./install_src/UpdateEULA.py" ]; then
   echo ">>> Running UpdateEULA.py..."
-  EULA_OUTPUT=$(python3 ./install_src/UpdateEULA.py 2>&1 || python ./install_src/UpdateEULA.py 2>&1)
+  EULA_OUTPUT=$(python3 ./install_src/UpdateEULA.py 2>&1 || python ./install_src/UpdateEULA.py 2>&1) || true
 elif [ -f "./install_src/UpdateEULA" ]; then
   echo ">>> Running UpdateEULA (legacy)..."
-  EULA_OUTPUT=$(./install_src/UpdateEULA 2>&1)
+  EULA_OUTPUT=$(./install_src/UpdateEULA 2>&1) || true
 else
   echo "WARNING: Neither UpdateEULA.py nor UpdateEULA found!"
   exit 1
@@ -39,9 +39,11 @@ fi
 echo "$EULA_OUTPUT"
 echo ""
 
-# Check if output contains "differ" (case-insensitive) without relying on grep exit codes.
-EULA_OUTPUT_LC=$(printf '%s' "$EULA_OUTPUT" | tr '[:upper:]' '[:lower:]')
-if [[ "$EULA_OUTPUT_LC" == *"differ"* ]]; then
+# Check if output contains "differ" (case-insensitive)
+# Use grep safely without relying on its exit code
+DIFFER_COUNT=$(echo "$EULA_OUTPUT" | grep -ic "differ" || echo "0")
+
+if [ "$DIFFER_COUNT" -gt 0 ]; then
   echo "============================================="
   echo "  RESULT: EULAs DIFFER — update is needed"
   echo "============================================="
