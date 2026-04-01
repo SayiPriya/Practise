@@ -91,10 +91,13 @@ jobs:
           $ver = "${{ github.event.inputs.release_version }}"
           wsl.exe bash -l .github/scripts/03-check-eula.sh $ver
           $exitCode = $LASTEXITCODE
+          echo ">>> EULA check exit code: $exitCode"
           if ($exitCode -eq 2) {
             echo "EULA_NEEDS_UPDATE=true" >> $env:GITHUB_OUTPUT
+            $global:LASTEXITCODE = 0
           } elseif ($exitCode -eq 0) {
             echo "EULA_NEEDS_UPDATE=false" >> $env:GITHUB_OUTPUT
+            $global:LASTEXITCODE = 0
           } else {
             exit $exitCode
           }
