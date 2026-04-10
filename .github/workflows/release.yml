@@ -269,6 +269,13 @@ jobs:
     steps:
       - name: Send QA Notification Email (Mock)
         shell: powershell
+        env:
+          SMTP_SERVER:   ${{ secrets.SMTP_SERVER }}
+          SMTP_FROM:     ${{ secrets.SMTP_FROM }}
+          SMTP_PORT:     ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_USE_SSL:  ${{ secrets.SMTP_USE_SSL }}
         run: |
           $ver    = "${{ github.event.inputs.release_version }}"
           $rc     = "${{ github.event.inputs.rc_number }}"
@@ -289,9 +296,42 @@ jobs:
           echo "    ---"
           echo $body
           echo ""
-          echo "NOTE: Uncomment Send-MailMessage and configure SMTP secrets to send real email."
-          Send-MailMessage -To $to -From "build@company.com" `
-          -Subject $subject -Body $body -SmtpServer "smtp.company.com"
+
+          # Real send is optional. If SMTP secrets are missing, keep this step in mock mode.
+          if ([string]::IsNullOrWhiteSpace($env:SMTP_SERVER)) {
+            Write-Warning "SMTP_SERVER is not configured. Skipping real email send (mock-only mode)."
+            exit 0
+          }
+
+          $mailParams = @{
+            To         = $to
+            From       = $(if ([string]::IsNullOrWhiteSpace($env:SMTP_FROM)) { "build@company.com" } else { $env:SMTP_FROM })
+            Subject    = $subject
+            Body       = $body
+            SmtpServer = $env:SMTP_SERVER
+          }
+
+          if (-not [string]::IsNullOrWhiteSpace($env:SMTP_PORT)) {
+            $mailParams.Port = [int]$env:SMTP_PORT
+          }
+
+          if ($env:SMTP_USE_SSL -eq "true") {
+            $mailParams.UseSsl = $true
+          }
+
+          if (-not [string]::IsNullOrWhiteSpace($env:SMTP_USERNAME) -and -not [string]::IsNullOrWhiteSpace($env:SMTP_PASSWORD)) {
+            $sec = ConvertTo-SecureString $env:SMTP_PASSWORD -AsPlainText -Force
+            $cred = New-Object System.Management.Automation.PSCredential($env:SMTP_USERNAME, $sec)
+            $mailParams.Credential = $cred
+          }
+
+          try {
+            Send-MailMessage @mailParams
+            echo ">>> Real email send attempted via SMTP server: $($env:SMTP_SERVER)"
+          } catch {
+            Write-Warning "Real email send failed: $($_.Exception.Message)"
+            Write-Warning "Keeping workflow green in mock flow. Configure SMTP secrets to enable real delivery."
+          }
 
   # ─── Phase 10: QA Sign-off (manual approval gate) ─────────────────────────
   qa-approval:
