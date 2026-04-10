@@ -253,7 +253,7 @@ $html = @"
     </div>
 
     <!-- Page title -->
-    <div class="cf-page-title">Desktop Application Release Checklist – QA Handoff</div>
+    <div class="cf-page-title">Desktop Application Release Checklist - QA Handoff</div>
     <div class="cf-page-meta">
       <div class="cf-page-meta-avatar">$($Actor.Substring(0,[Math]::Min(2,$Actor.Length)).ToUpper())</div>
       <span>Created by <strong>$Actor</strong></span>

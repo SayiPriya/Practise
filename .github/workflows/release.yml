@@ -369,15 +369,21 @@ jobs:
           # These env vars are set per-environment in GitHub repo Settings > Environments > qa-approval > Variables
           # QA reviewer sets them before clicking Approve. Default to Passed if not configured.
           function Out { param($k,$v) echo "$k=$v" >> $env:GITHUB_OUTPUT }
-          Out QA_FRESH_INSTALL  ($env:QA_FRESH_INSTALL  -ne '' ? $env:QA_FRESH_INSTALL  : 'Passed')
-          Out QA_UPGRADE        ($env:QA_UPGRADE        -ne '' ? $env:QA_UPGRADE        : 'Passed')
-          Out QA_UNINSTALL      ($env:QA_UNINSTALL      -ne '' ? $env:QA_UNINSTALL      : 'Passed')
-          Out QA_SILENT_INSTALL ($env:QA_SILENT_INSTALL -ne '' ? $env:QA_SILENT_INSTALL : 'Passed')
-          Out QA_DEFAULT_PATH   ($env:QA_DEFAULT_PATH   -ne '' ? $env:QA_DEFAULT_PATH   : 'Passed')
-          Out QA_APP_LAUNCH     ($env:QA_APP_LAUNCH     -ne '' ? $env:QA_APP_LAUNCH     : 'Passed')
-          Out QA_SMOKE_TEST     ($env:QA_SMOKE_TEST     -ne '' ? $env:QA_SMOKE_TEST     : 'Passed')
-          Out QA_NO_ERRORS      ($env:QA_NO_ERRORS      -ne '' ? $env:QA_NO_ERRORS      : 'Passed')
-          Out QA_LOGS_REVIEWED  ($env:QA_LOGS_REVIEWED  -ne '' ? $env:QA_LOGS_REVIEWED  : 'Passed')
+          function ValOrDefault {
+            param([string]$Value, [string]$Default = "Passed")
+            if ([string]::IsNullOrWhiteSpace($Value)) { return $Default }
+            return $Value
+          }
+
+          Out QA_FRESH_INSTALL  (ValOrDefault $env:QA_FRESH_INSTALL)
+          Out QA_UPGRADE        (ValOrDefault $env:QA_UPGRADE)
+          Out QA_UNINSTALL      (ValOrDefault $env:QA_UNINSTALL)
+          Out QA_SILENT_INSTALL (ValOrDefault $env:QA_SILENT_INSTALL)
+          Out QA_DEFAULT_PATH   (ValOrDefault $env:QA_DEFAULT_PATH)
+          Out QA_APP_LAUNCH     (ValOrDefault $env:QA_APP_LAUNCH)
+          Out QA_SMOKE_TEST     (ValOrDefault $env:QA_SMOKE_TEST)
+          Out QA_NO_ERRORS      (ValOrDefault $env:QA_NO_ERRORS)
+          Out QA_LOGS_REVIEWED  (ValOrDefault $env:QA_LOGS_REVIEWED)
           Out QA_APPROVED_BY    "${{ github.event.inputs.qa_email }}"
           Out QA_APPROVED_DATE  (Get-Date -Format 'yyyy-MM-dd')
           echo ">>> QA has signed off. Proceeding to Confluence publish."
