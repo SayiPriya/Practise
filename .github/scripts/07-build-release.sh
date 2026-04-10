@@ -40,14 +40,14 @@ done
 echo ""
 
 # Determine which build script exists
-if [ -f "./install_src/build_release.py" ]; then
-  BUILD_CMD="./install_src/build_release.py"
-elif [ -f "./install_src/build_release" ]; then
-  BUILD_CMD="./install_src/build_release"
-else
-  echo "ERROR: build_release.py not found!"
-  exit 1
-fi
+#if [ -f "./install_src/build_release.py" ]; then
+#  BUILD_CMD="./install_src/build_release.py"
+#elif [ -f "./install_src/build_release" ]; then
+#  BUILD_CMD="./install_src/build_release"
+#else
+#  echo "ERROR: build_release.py not found!"
+# exit 1
+#fi
 
 echo ">>> Running: $BUILD_CMD -v $VER_NODOT $*"
 $BUILD_CMD -v "$VER_NODOT" "$@"
