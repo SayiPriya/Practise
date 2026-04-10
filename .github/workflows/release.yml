@@ -432,7 +432,7 @@ jobs:
         run: |
           $null = New-Item -ItemType Directory -Path "C:\qa-reports" -Force
           Copy-Item -Path "qa-handoff-report\*.html" -Destination "C:\qa-reports\" -Force
-          echo ">>> Report copied to C:\qa-reports\ — view at http://localhost:8080/"
+          echo ">>> Report copied to C:\qa-reports\ - view at http://localhost:8080/"
 
       - name: Upload QA Handoff Report as Artifact
         uses: actions/upload-artifact@v4
