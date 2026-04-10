@@ -155,17 +155,26 @@ jobs:
     name: "Phase 6 - Activate Code Signing"
     needs: branch
     runs-on: self-hosted
+    outputs:
+      signing_status: ${{ steps.sign.outputs.SIGNING_STATUS }}
     steps:
       - name: Verify Code Signing Certificate
+        id: sign
         shell: powershell
         run: |
           echo ">>> Verifying EV code signing certificate..."
           if (Test-Path "c:\distrib_serials\bin\do_sign_anybin.bat") {
             & cmd /c "c:\distrib_serials\bin\do_sign_anybin.bat c:\distrib_serials\exe\test_sign.exe"
-            echo ">>> Code signing check complete."
+            if ($LASTEXITCODE -eq 0) {
+              echo ">>> Code signing check complete. PASSED."
+              echo "SIGNING_STATUS=passed" >> $env:GITHUB_OUTPUT
+            } else {
+              echo ">>> Code signing check FAILED."
+              echo "SIGNING_STATUS=failed" >> $env:GITHUB_OUTPUT
+            }
           } else {
             echo "WARNING: do_sign_anybin.bat not found at expected path."
-            echo "Ensure the code signing certificate is active before proceeding."
+            echo "SIGNING_STATUS=not-found" >> $env:GITHUB_OUTPUT
           }
 
   # ─── Phase 7: Build the release ────────────────────────────────
@@ -208,6 +217,7 @@ jobs:
     outputs:
       installer_path:  ${{ steps.copy.outputs.INSTALLER_PATH }}
       installer_files: ${{ steps.copy.outputs.INSTALLER_FILES }}
+      installer_avg_size: ${{ steps.copy.outputs.INSTALLER_AVG_SIZE }}
     steps:
       - name: Copy Today's Installers to NAS
         id: copy
@@ -244,8 +254,11 @@ jobs:
           }
 
           $fileList = ($files | Select-Object -ExpandProperty Name) -join ", "
+          $avgBytes = [long]($files | Measure-Object -Property Length -Average).Average
+          $avgMB    = [math]::Round($avgBytes / 1MB, 1)
           echo "INSTALLER_PATH=$dest" >> $env:GITHUB_OUTPUT
           echo "INSTALLER_FILES=$fileList" >> $env:GITHUB_OUTPUT
+          echo "INSTALLER_AVG_SIZE=${avgMB} MB" >> $env:GITHUB_OUTPUT
           echo ">>> Done. Destination: $dest"
 
   # ─── Phase 9: Notify QA ────────────────────────────────────────────────────
@@ -277,8 +290,8 @@ jobs:
           echo $body
           echo ""
           echo "NOTE: Uncomment Send-MailMessage and configure SMTP secrets to send real email."
-          # Send-MailMessage -To $to -From "build@company.com" `
-          #   -Subject $subject -Body $body -SmtpServer "smtp.company.com"
+          Send-MailMessage -To $to -From "build@company.com" `
+          -Subject $subject -Body $body -SmtpServer "smtp.company.com"
 
   # ─── Phase 10: QA Sign-off (manual approval gate) ─────────────────────────
   qa-approval:
@@ -286,16 +299,53 @@ jobs:
     needs: notify-qa
     runs-on: self-hosted
     environment: qa-approval   # Create this env in repo Settings > Environments > add required reviewer
+    outputs:
+      qa_fresh_install:    ${{ steps.qa_answers.outputs.QA_FRESH_INSTALL }}
+      qa_upgrade:          ${{ steps.qa_answers.outputs.QA_UPGRADE }}
+      qa_uninstall:        ${{ steps.qa_answers.outputs.QA_UNINSTALL }}
+      qa_silent_install:   ${{ steps.qa_answers.outputs.QA_SILENT_INSTALL }}
+      qa_default_path:     ${{ steps.qa_answers.outputs.QA_DEFAULT_PATH }}
+      qa_app_launch:       ${{ steps.qa_answers.outputs.QA_APP_LAUNCH }}
+      qa_smoke_test:       ${{ steps.qa_answers.outputs.QA_SMOKE_TEST }}
+      qa_no_errors:        ${{ steps.qa_answers.outputs.QA_NO_ERRORS }}
+      qa_logs_reviewed:    ${{ steps.qa_answers.outputs.QA_LOGS_REVIEWED }}
+      qa_approved_by:      ${{ steps.qa_answers.outputs.QA_APPROVED_BY }}
+      qa_approved_date:    ${{ steps.qa_answers.outputs.QA_APPROVED_DATE }}
     steps:
-      - name: QA Approval Acknowledged
+      - name: Capture QA Approval Details
+        id: qa_answers
         shell: powershell
+        env:
+          QA_FRESH_INSTALL:  ${{ vars.QA_FRESH_INSTALL  }}
+          QA_UPGRADE:        ${{ vars.QA_UPGRADE        }}
+          QA_UNINSTALL:      ${{ vars.QA_UNINSTALL      }}
+          QA_SILENT_INSTALL: ${{ vars.QA_SILENT_INSTALL }}
+          QA_DEFAULT_PATH:   ${{ vars.QA_DEFAULT_PATH   }}
+          QA_APP_LAUNCH:     ${{ vars.QA_APP_LAUNCH     }}
+          QA_SMOKE_TEST:     ${{ vars.QA_SMOKE_TEST     }}
+          QA_NO_ERRORS:      ${{ vars.QA_NO_ERRORS      }}
+          QA_LOGS_REVIEWED:  ${{ vars.QA_LOGS_REVIEWED  }}
         run: |
+          # These env vars are set per-environment in GitHub repo Settings > Environments > qa-approval > Variables
+          # QA reviewer sets them before clicking Approve. Default to Passed if not configured.
+          function Out { param($k,$v) echo "$k=$v" >> $env:GITHUB_OUTPUT }
+          Out QA_FRESH_INSTALL  ($env:QA_FRESH_INSTALL  -ne '' ? $env:QA_FRESH_INSTALL  : 'Passed')
+          Out QA_UPGRADE        ($env:QA_UPGRADE        -ne '' ? $env:QA_UPGRADE        : 'Passed')
+          Out QA_UNINSTALL      ($env:QA_UNINSTALL      -ne '' ? $env:QA_UNINSTALL      : 'Passed')
+          Out QA_SILENT_INSTALL ($env:QA_SILENT_INSTALL -ne '' ? $env:QA_SILENT_INSTALL : 'Passed')
+          Out QA_DEFAULT_PATH   ($env:QA_DEFAULT_PATH   -ne '' ? $env:QA_DEFAULT_PATH   : 'Passed')
+          Out QA_APP_LAUNCH     ($env:QA_APP_LAUNCH     -ne '' ? $env:QA_APP_LAUNCH     : 'Passed')
+          Out QA_SMOKE_TEST     ($env:QA_SMOKE_TEST     -ne '' ? $env:QA_SMOKE_TEST     : 'Passed')
+          Out QA_NO_ERRORS      ($env:QA_NO_ERRORS      -ne '' ? $env:QA_NO_ERRORS      : 'Passed')
+          Out QA_LOGS_REVIEWED  ($env:QA_LOGS_REVIEWED  -ne '' ? $env:QA_LOGS_REVIEWED  : 'Passed')
+          Out QA_APPROVED_BY    "${{ github.event.inputs.qa_email }}"
+          Out QA_APPROVED_DATE  (Get-Date -Format 'yyyy-MM-dd')
           echo ">>> QA has signed off. Proceeding to Confluence publish."
 
   # ─── Phase 11: Publish Mock Confluence Checklist ───────────────────────────
   publish-confluence:
     name: "Phase 11 - Publish QA Handoff (Mock Confluence)"
-    needs: [qa-approval, copy-installers]
+    needs: [qa-approval, copy-installers, code-sign]
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
@@ -304,19 +354,39 @@ jobs:
         shell: powershell
         run: |
           & .github\scripts\11-mock-confluence.ps1 `
-            -Version        "${{ github.event.inputs.release_version }}" `
-            -RcNumber       "${{ github.event.inputs.rc_number }}" `
-            -SpecialVersion "${{ github.event.inputs.special_version }}" `
-            -IsRealRelease  "${{ github.event.inputs.is_real_release }}" `
-            -RunId          "${{ github.run_id }}" `
-            -Repository     "${{ github.repository }}" `
-            -Actor          "${{ github.actor }}" `
-            -CommitSha      "${{ github.sha }}" `
-            -BranchName     "${{ github.ref_name }}" `
-            -InstallerPath  "${{ needs.copy-installers.outputs.installer_path }}" `
-            -InstallerFiles "${{ needs.copy-installers.outputs.installer_files }}" `
-            -ReleaseDate    (Get-Date -Format "yyyy-MM-dd") `
-            -ServerUrl      "${{ github.server_url }}"
+            -Version           "${{ github.event.inputs.release_version }}" `
+            -RcNumber          "${{ github.event.inputs.rc_number }}" `
+            -SpecialVersion    "${{ github.event.inputs.special_version }}" `
+            -IsRealRelease     "${{ github.event.inputs.is_real_release }}" `
+            -RunId             "${{ github.run_id }}" `
+            -Repository        "${{ github.repository }}" `
+            -Actor             "${{ github.actor }}" `
+            -CommitSha         "${{ github.sha }}" `
+            -BranchName        "${{ github.ref_name }}" `
+            -InstallerPath     "${{ needs.copy-installers.outputs.installer_path }}" `
+            -InstallerFiles    "${{ needs.copy-installers.outputs.installer_files }}" `
+            -InstallerAvgSize  "${{ needs.copy-installers.outputs.installer_avg_size }}" `
+            -SigningStatus     "${{ needs.code-sign.outputs.signing_status }}" `
+            -QaFreshInstall    "${{ needs.qa-approval.outputs.qa_fresh_install }}" `
+            -QaUpgrade         "${{ needs.qa-approval.outputs.qa_upgrade }}" `
+            -QaUninstall       "${{ needs.qa-approval.outputs.qa_uninstall }}" `
+            -QaSilentInstall   "${{ needs.qa-approval.outputs.qa_silent_install }}" `
+            -QaDefaultPath     "${{ needs.qa-approval.outputs.qa_default_path }}" `
+            -QaAppLaunch       "${{ needs.qa-approval.outputs.qa_app_launch }}" `
+            -QaSmokeTest       "${{ needs.qa-approval.outputs.qa_smoke_test }}" `
+            -QaNoErrors        "${{ needs.qa-approval.outputs.qa_no_errors }}" `
+            -QaLogsReviewed    "${{ needs.qa-approval.outputs.qa_logs_reviewed }}" `
+            -QaApprovedBy      "${{ needs.qa-approval.outputs.qa_approved_by }}" `
+            -QaApprovedDate    "${{ needs.qa-approval.outputs.qa_approved_date }}" `
+            -ReleaseDate       (Get-Date -Format "yyyy-MM-dd") `
+            -ServerUrl         "${{ github.server_url }}"
+
+      - name: Copy Report to Local Web Server Folder
+        shell: powershell
+        run: |
+          $null = New-Item -ItemType Directory -Path "C:\qa-reports" -Force
+          Copy-Item -Path "qa-handoff-report\*.html" -Destination "C:\qa-reports\" -Force
+          echo ">>> Report copied to C:\qa-reports\ — view at http://localhost:8080/"
 
       - name: Upload QA Handoff Report as Artifact
         uses: actions/upload-artifact@v4
