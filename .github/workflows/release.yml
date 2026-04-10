@@ -42,6 +42,10 @@ on:
         required: true
         type: boolean
         default: false
+      qa_email:
+        description: "Email address for QA notification (mock)"
+        required: true
+        type: string
 
 jobs:
   # ─── Phase 1: Clone or update the repo ──────────────────────────
@@ -195,3 +199,128 @@ jobs:
           echo ">>> Build flags: $flagStr"
 
           wsl.exe bash -l .github/scripts/07-build-release.sh $ver @flags
+
+  # ─── Phase 8: Copy Installers to NAS ──────────────────────────────────────
+  copy-installers:
+    name: "Phase 8 - Copy Installers to NAS"
+    needs: build
+    runs-on: self-hosted
+    outputs:
+      installer_path:  ${{ steps.copy.outputs.INSTALLER_PATH }}
+      installer_files: ${{ steps.copy.outputs.INSTALLER_FILES }}
+    steps:
+      - name: Copy Today's Installers to NAS
+        id: copy
+        shell: powershell
+        run: |
+          $ver     = "${{ github.event.inputs.release_version }}"
+          $srcBase = "c:\distrib_serials\exes"
+          $dest    = "\\prodnas\Development\Release\$ver"
+          $today   = (Get-Date).Date
+
+          echo ">>> Searching $srcBase for today's ($today) installers..."
+          $files = Get-ChildItem -Path $srcBase -File -ErrorAction SilentlyContinue |
+                   Where-Object { $_.LastWriteTime.Date -eq $today } |
+                   Sort-Object LastWriteTime -Descending
+
+          if ($files.Count -eq 0) {
+            Write-Warning "No installer files found in $srcBase for today. Skipping copy."
+            echo "INSTALLER_PATH=" >> $env:GITHUB_OUTPUT
+            echo "INSTALLER_FILES=" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
+          echo ">>> Found $($files.Count) file(s):"
+          $files | ForEach-Object { echo "    $($_.Name)  [$($_.LastWriteTime)]" }
+
+          if (-not (Test-Path $dest)) {
+            New-Item -ItemType Directory -Path $dest -Force | Out-Null
+            echo ">>> Created destination: $dest"
+          }
+
+          $files | ForEach-Object {
+            Copy-Item -Path $_.FullName -Destination $dest -Force
+            echo ">>> Copied: $($_.Name)"
+          }
+
+          $fileList = ($files | Select-Object -ExpandProperty Name) -join ", "
+          echo "INSTALLER_PATH=$dest" >> $env:GITHUB_OUTPUT
+          echo "INSTALLER_FILES=$fileList" >> $env:GITHUB_OUTPUT
+          echo ">>> Done. Destination: $dest"
+
+  # ─── Phase 9: Notify QA ────────────────────────────────────────────────────
+  notify-qa:
+    name: "Phase 9 - Notify QA Team"
+    needs: copy-installers
+    runs-on: self-hosted
+    steps:
+      - name: Send QA Notification Email (Mock)
+        shell: powershell
+        run: |
+          $ver    = "${{ github.event.inputs.release_version }}"
+          $rc     = "${{ github.event.inputs.rc_number }}"
+          $to     = "${{ github.event.inputs.qa_email }}"
+          $path   = "${{ needs.copy-installers.outputs.installer_path }}"
+          $files  = "${{ needs.copy-installers.outputs.installer_files }}"
+          $runUrl = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          $subject = "[MOCK] SDS2 $ver RC$rc - Installers Ready for QA Testing"
+          $body    = "Hello QA Team,`n`nSDS2 $ver RC$rc installers are ready for testing.`n`n" +
+                     "Location : $path`nFiles    : $files`nBuild    : $runUrl`n`n" +
+                     "Please approve the workflow gate below to acknowledge QA completion:`n$runUrl`n`n" +
+                     "Regards,`nSDS2 Release Automation"
+
+          echo ">>> [MOCK EMAIL]"
+          echo "    To      : $to"
+          echo "    Subject : $subject"
+          echo "    ---"
+          echo $body
+          echo ""
+          echo "NOTE: Uncomment Send-MailMessage and configure SMTP secrets to send real email."
+          # Send-MailMessage -To $to -From "build@company.com" `
+          #   -Subject $subject -Body $body -SmtpServer "smtp.company.com"
+
+  # ─── Phase 10: QA Sign-off (manual approval gate) ─────────────────────────
+  qa-approval:
+    name: "Phase 10 - QA Sign-off"
+    needs: notify-qa
+    runs-on: self-hosted
+    environment: qa-approval   # Create this env in repo Settings > Environments > add required reviewer
+    steps:
+      - name: QA Approval Acknowledged
+        shell: powershell
+        run: |
+          echo ">>> QA has signed off. Proceeding to Confluence publish."
+
+  # ─── Phase 11: Publish Mock Confluence Checklist ───────────────────────────
+  publish-confluence:
+    name: "Phase 11 - Publish QA Handoff (Mock Confluence)"
+    needs: [qa-approval, copy-installers]
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate QA Handoff HTML Report
+        shell: powershell
+        run: |
+          & .github\scripts\11-mock-confluence.ps1 `
+            -Version        "${{ github.event.inputs.release_version }}" `
+            -RcNumber       "${{ github.event.inputs.rc_number }}" `
+            -SpecialVersion "${{ github.event.inputs.special_version }}" `
+            -IsRealRelease  "${{ github.event.inputs.is_real_release }}" `
+            -RunId          "${{ github.run_id }}" `
+            -Repository     "${{ github.repository }}" `
+            -Actor          "${{ github.actor }}" `
+            -CommitSha      "${{ github.sha }}" `
+            -BranchName     "${{ github.ref_name }}" `
+            -InstallerPath  "${{ needs.copy-installers.outputs.installer_path }}" `
+            -InstallerFiles "${{ needs.copy-installers.outputs.installer_files }}" `
+            -ReleaseDate    (Get-Date -Format "yyyy-MM-dd") `
+            -ServerUrl      "${{ github.server_url }}"
+
+      - name: Upload QA Handoff Report as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-handoff-${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.rc_number }}
+          path: qa-handoff-report/
+          retention-days: 30
