@@ -50,7 +50,7 @@ echo ""
 #fi
 
 echo ">>> Running: $BUILD_CMD -v $VER_NODOT $*"
-$BUILD_CMD -v "$VER_NODOT" "$@"
+#$BUILD_CMD -v "$VER_NODOT" "$@"
 
 echo ""
 echo "=== Build Complete ==="
