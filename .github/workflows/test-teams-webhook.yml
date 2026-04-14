@@ -1,0 +1,26 @@
+name: Test Teams Webhook
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-webhook:
+    name: "Send Test Teams Notification"
+    runs-on: self-hosted
+    steps:
+      - name: Post to Teams Webhook
+        shell: powershell
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TEAMS_WEBHOOK_URL)) {
+            Write-Warning "TEAMS_WEBHOOK_URL secret is not set. Skipping."
+            exit 0
+          }
+
+          $payload = @{
+            text = "Test notification from GitHub Actions. Webhook is working correctly."
+          } | ConvertTo-Json -Depth 3
+
+          Invoke-RestMethod -Method Post -Uri $env:TEAMS_WEBHOOK_URL -ContentType "application/json" -Body $payload
+          echo ">>> Teams webhook notification sent successfully."

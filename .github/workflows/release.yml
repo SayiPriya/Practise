@@ -46,8 +46,51 @@ on:
         description: "Email address for QA notification (mock)"
         required: true
         type: string
+  push:
+    branches:
+      - Test
+
+env:
+  RELEASE_VERSION:     ${{ github.event_name == 'workflow_dispatch' && inputs.release_version || vars.TEST_RELEASE_VERSION || '2026.07' }}
+  VERSION_MAJOR:       ${{ github.event_name == 'workflow_dispatch' && inputs.version_major || vars.TEST_VERSION_MAJOR || '2026' }}
+  BRANCH_OVERRIDE:     ${{ github.event_name == 'workflow_dispatch' && inputs.branch_override || vars.TEST_BRANCH_OVERRIDE || '' }}
+  RELEASE_TASK_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.release_task_number || vars.TEST_RELEASE_TASK_NUMBER || 'RLC-0000' }}
+  RC_NUMBER:           ${{ github.event_name == 'workflow_dispatch' && inputs.rc_number || vars.TEST_RC_NUMBER || '1' }}
+  SPECIAL_VERSION:     ${{ github.event_name == 'workflow_dispatch' && inputs.special_version || vars.TEST_SPECIAL_VERSION || '' }}
+  COMMIT_REF:          ${{ github.event_name == 'workflow_dispatch' && inputs.commit_ref || vars.TEST_COMMIT_REF || '' }}
+  IS_REAL_RELEASE:     ${{ github.event_name == 'workflow_dispatch' && inputs.is_real_release || vars.TEST_IS_REAL_RELEASE || 'false' }}
+  BUILD_EDUCATION:     ${{ github.event_name == 'workflow_dispatch' && inputs.build_education || vars.TEST_BUILD_EDUCATION || 'false' }}
+  QA_EMAIL:            ${{ github.event_name == 'workflow_dispatch' && inputs.qa_email || vars.TEST_QA_EMAIL || 'qa@example.com' }}
 
 jobs:
+
+  MockNotify:
+    name: "Phase 9A - Notify Teams Chat (Webhook)"
+    needs: copy-installers
+    runs-on: self-hosted
+    steps:
+      - name: Notify Teams Chat (Webhook)
+        shell: powershell
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TEAMS_WEBHOOK_URL)) {
+            Write-Warning "TEAMS_WEBHOOK_URL not configured. Skipping Teams notification."
+            exit 0
+          }
+
+          $payload = @{
+            releaseVersion = "${{ env.RELEASE_VERSION }}"
+            rcNumber       = "${{ env.RC_NUMBER }}"
+            installerPath  = "${{ needs.copy-installers.outputs.installer_path }}"
+            installerFiles = "${{ needs.copy-installers.outputs.installer_files }}"
+            runUrl         = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            qaEmail        = "${{ env.QA_EMAIL }}"
+          } | ConvertTo-Json -Depth 5
+
+          Invoke-RestMethod -Method Post -Uri $env:TEAMS_WEBHOOK_URL -ContentType "application/json" -Body $payload
+          echo ">>> Teams webhook notification sent."
+
   # ─── Phase 1: Clone or update the repo ──────────────────────────
   setup:
     name: "Phase 1 - Clone / Update Repo"
@@ -60,8 +103,8 @@ jobs:
       - name: Clone or Update Release Repo
         shell: powershell
         run: |
-          $ver = "${{ inputs.release_version }}"
-          $branch = "${{ inputs.branch_override }}"
+          $ver = "${{ env.RELEASE_VERSION }}"
+          $branch = "${{ env.BRANCH_OVERRIDE }}"
           if ([string]::IsNullOrWhiteSpace($branch)) {
             $branch = "sds2_2026_1"
           }
@@ -81,8 +124,8 @@ jobs:
       - name: Verify Branch, Version, and Tags
         shell: powershell
         run: |
-          $ver = "${{ github.event.inputs.release_version }}"
-          $verMaj = "${{ github.event.inputs.version_major }}"
+          $ver = "${{ env.RELEASE_VERSION }}"
+          $verMaj = "${{ env.VERSION_MAJOR }}"
           wsl.exe bash -l .github/scripts/02-verify-release.sh $ver $verMaj
 
   # ─── Phase 3: EULA check and auto-update if needed ─────────────
@@ -97,7 +140,7 @@ jobs:
         id: eula_check
         shell: powershell
         run: |
-          $ver = "${{ github.event.inputs.release_version }}"
+          $ver = "${{ env.RELEASE_VERSION }}"
           wsl.exe bash -l .github/scripts/03-check-eula.sh $ver
           $exitCode = $LASTEXITCODE
           echo ">>> EULA check exit code: $exitCode"
@@ -115,8 +158,8 @@ jobs:
         if: steps.eula_check.outputs.EULA_NEEDS_UPDATE == 'true'
         shell: powershell
         run: |
-          $ver = "${{ github.event.inputs.release_version }}"
-          $task = "${{ github.event.inputs.release_task_number }}"
+          $ver = "${{ env.RELEASE_VERSION }}"
+          $task = "${{ env.RELEASE_TASK_NUMBER }}"
           echo ">>> EULAs differ. Running auto-update..."
           wsl.exe bash -l .github/scripts/04-update-eula.sh $ver $task
 
@@ -131,8 +174,8 @@ jobs:
       - name: Create Release Candidate Tag
         shell: powershell
         run: |
-          $ver = "${{ github.event.inputs.release_version }}"
-          $rc = "${{ github.event.inputs.rc_number }}"
+          $ver = "${{ env.RELEASE_VERSION }}"
+          $rc = "${{ env.RC_NUMBER }}"
           wsl.exe bash -l .github/scripts/05-tag-release.sh $ver $rc
 
   # ─── Phase 5: Create release branch ────────────────────────────
@@ -146,8 +189,8 @@ jobs:
       - name: Create Release Branch
         shell: powershell
         run: |
-          $ver = "${{ github.event.inputs.release_version }}"
-          $ref = "${{ github.event.inputs.commit_ref }}"
+          $ver = "${{ env.RELEASE_VERSION }}"
+          $ref = "${{ env.COMMIT_REF }}"
           wsl.exe bash -l .github/scripts/06-create-branch.sh $ver $ref
 
   # ─── Phase 6: Code Signing (Windows native, not WSL) ───────────
@@ -188,10 +231,10 @@ jobs:
       - name: Build Release
         shell: powershell
         run: |
-          $ver = "${{ github.event.inputs.release_version }}"
+          $ver = "${{ env.RELEASE_VERSION }}"
           $flags = @()
 
-          $special = "${{ github.event.inputs.special_version }}"
+          $special = "${{ env.SPECIAL_VERSION }}"
           if (-not [string]::IsNullOrWhiteSpace($special)) {
             $special = $special.Trim()
             if ($special -match "\s") {
@@ -201,8 +244,8 @@ jobs:
             $flags += $special
           }
 
-          if ("${{ github.event.inputs.is_real_release }}" -eq "true") { $flags += "-r" }
-          if ("${{ github.event.inputs.build_education }}" -eq "true") { $flags += "-E" }
+          if ("${{ env.IS_REAL_RELEASE }}" -eq "true") { $flags += "-r" }
+          if ("${{ env.BUILD_EDUCATION }}" -eq "true") { $flags += "-E" }
 
           $flagStr = $flags -join " "
           echo ">>> Build flags: $flagStr"
@@ -223,7 +266,7 @@ jobs:
         id: copy
         shell: powershell
         run: |
-          $ver     = "${{ github.event.inputs.release_version }}"
+          $ver     = "${{ env.RELEASE_VERSION }}"
           $srcBase = "c:\distrib_serials\exes"
           $dest    = "\\prodnas\Development\Release\$ver"
           $today   = (Get-Date).Date
@@ -277,9 +320,9 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           SMTP_USE_SSL:  ${{ secrets.SMTP_USE_SSL }}
         run: |
-          $ver    = "${{ github.event.inputs.release_version }}"
-          $rc     = "${{ github.event.inputs.rc_number }}"
-          $to     = "${{ github.event.inputs.qa_email }}"
+          $ver    = "${{ env.RELEASE_VERSION }}"
+          $rc     = "${{ env.RC_NUMBER }}"
+          $to     = "${{ env.QA_EMAIL }}"
           $path   = "${{ needs.copy-installers.outputs.installer_path }}"
           $files  = "${{ needs.copy-installers.outputs.installer_files }}"
           $runUrl = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -384,7 +427,7 @@ jobs:
           Out QA_SMOKE_TEST     (ValOrDefault $env:QA_SMOKE_TEST)
           Out QA_NO_ERRORS      (ValOrDefault $env:QA_NO_ERRORS)
           Out QA_LOGS_REVIEWED  (ValOrDefault $env:QA_LOGS_REVIEWED)
-          Out QA_APPROVED_BY    "${{ github.event.inputs.qa_email }}"
+          Out QA_APPROVED_BY    "${{ env.QA_EMAIL }}"
           Out QA_APPROVED_DATE  (Get-Date -Format 'yyyy-MM-dd')
           echo ">>> QA has signed off. Proceeding to Confluence publish."
 
@@ -400,10 +443,10 @@ jobs:
         shell: powershell
         run: |
           & .github\scripts\11-mock-confluence.ps1 `
-            -Version           "${{ github.event.inputs.release_version }}" `
-            -RcNumber          "${{ github.event.inputs.rc_number }}" `
-            -SpecialVersion    "${{ github.event.inputs.special_version }}" `
-            -IsRealRelease     "${{ github.event.inputs.is_real_release }}" `
+            -Version           "${{ env.RELEASE_VERSION }}" `
+            -RcNumber          "${{ env.RC_NUMBER }}" `
+            -SpecialVersion    "${{ env.SPECIAL_VERSION }}" `
+            -IsRealRelease     "${{ env.IS_REAL_RELEASE }}" `
             -RunId             "${{ github.run_id }}" `
             -Repository        "${{ github.repository }}" `
             -Actor             "${{ github.actor }}" `
@@ -437,6 +480,6 @@ jobs:
       - name: Upload QA Handoff Report as Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: qa-handoff-${{ github.event.inputs.release_version }}-RC${{ github.event.inputs.rc_number }}
+          name: qa-handoff-${{ env.RELEASE_VERSION }}-RC${{ env.RC_NUMBER }}
           path: qa-handoff-report/
           retention-days: 30

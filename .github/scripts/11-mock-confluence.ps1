@@ -69,6 +69,58 @@ $qaApprovedDateCell = if ($QaApprovedDate) { $QaApprovedDate } else { '<span cla
 $installerPathCell  = if ($InstallerPath)    { $InstallerPath }    else { '<span class="lbl lbl-yellow">TBD</span>' }
 $installerSizeCell  = if ($InstallerAvgSize) { "$InstallerAvgSize (avg)" } else { '<span class="lbl lbl-yellow">TBD</span>' }
 
+# UI helpers
+function HtmlEncode([string]$Text) {
+  return [System.Net.WebUtility]::HtmlEncode($Text)
+}
+
+# Installer list for HTML
+$installerListHtml = ""
+if ($InstallerFiles) {
+  $InstallerFiles -split ",\s*" | ForEach-Object {
+    $name = $_.Trim()
+    if ($name) {
+      $installerListHtml += "<li>$(HtmlEncode $name)</li>`n"
+    }
+  }
+}
+if ([string]::IsNullOrWhiteSpace($installerListHtml)) {
+  $installerListHtml = '<li><span class="lbl lbl-yellow">TBD</span></li>'
+}
+
+# Release notes source: prefer changelog files, fallback to recent git log
+$changelogSource = ""
+$changelogText   = ""
+$changelogCandidates = @("CHANGELOG.md", "Changelog.md", "changelog.md", "RELEASE_NOTES.md", "release-notes.md")
+
+foreach ($cand in $changelogCandidates) {
+  if (Test-Path $cand -PathType Leaf) {
+    $changelogSource = $cand
+    $changelogText = (Get-Content -Path $cand -TotalCount 200 -ErrorAction SilentlyContinue) -join "`n"
+    break
+  }
+}
+
+if ([string]::IsNullOrWhiteSpace($changelogText)) {
+  try {
+    $gitLines = git log --pretty=format:"- %h %s (%an, %ad)" --date=short -n 30 2>$null
+    if ($gitLines) {
+      $changelogSource = "git log (last 30 commits)"
+      $changelogText = ($gitLines -join "`n")
+    }
+  } catch {
+    # Keep fallback below.
+  }
+}
+
+if ([string]::IsNullOrWhiteSpace($changelogText)) {
+  $changelogSource = "none"
+  $changelogText = "No changelog content found in repository."
+}
+
+$changelogHtml = "<pre class='changelog-pre'>$(HtmlEncode $changelogText)</pre>"
+$changelogSourceHtml = HtmlEncode $changelogSource
+
 # ── Generate HTML ───────────────────────────────────────────────────────────
 $html = @"
 <!DOCTYPE html>
@@ -125,6 +177,7 @@ $html = @"
     .cf-sidebar-item {
       padding: 7px 16px; font-size: 13px; color: #172B4D;
       cursor: pointer; display: flex; align-items: center; gap: 8px;
+      border: none; background: transparent; width: 100%; text-align: left;
     }
     .cf-sidebar-item:hover { background: #F4F5F7; }
     .cf-sidebar-item.active { background: #DEEBFF; color: #0052CC; font-weight: 600;
@@ -133,6 +186,15 @@ $html = @"
 
     /* ── Main content ── */
     .cf-main { flex: 1; padding: 32px 40px 60px; max-width: 960px; }
+
+    /* ── Tabs ── */
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .changelog-pre {
+      background: #FAFBFC; border: 1px solid #DFE1E6; border-radius: 3px;
+      padding: 12px; font-size: 12px; line-height: 1.5; white-space: pre-wrap;
+      font-family: Consolas, "Courier New", monospace;
+    }
 
     /* ── Breadcrumb ── */
     .cf-breadcrumb { font-size: 12px; color: #5E6C84; margin-bottom: 20px; display: flex; gap: 4px; }
@@ -188,7 +250,7 @@ $html = @"
     /* ── Inline list of files ── */
     .file-list { list-style: none; padding: 0; }
     .file-list li { padding: 3px 0; font-family: monospace; font-size: 12px; color: #172B4D; }
-    .file-list li::before { content: "📦 "; }
+    .file-list li::before { content: "- "; }
 
     /* ── Page footer ── */
     .cf-footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #DFE1E6;
@@ -223,18 +285,18 @@ $html = @"
   <!-- Sidebar -->
   <aside class="cf-sidebar">
     <div class="cf-sidebar-space">SDS2 Releases</div>
-    <div class="cf-sidebar-item">
+    <button class="cf-sidebar-item active" type="button" data-tab="overview-tab">
       <svg class="cf-sidebar-icon" viewBox="0 0 24 24" fill="#5E6C84"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
       Overview
-    </div>
-    <div class="cf-sidebar-item">
+    </button>
+    <button class="cf-sidebar-item" type="button" data-tab="release-notes-tab">
       <svg class="cf-sidebar-icon" viewBox="0 0 24 24" fill="#5E6C84"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
       Release Notes
-    </div>
-    <div class="cf-sidebar-item active">
+    </button>
+    <button class="cf-sidebar-item" type="button" data-tab="qa-handoff-tab">
       <svg class="cf-sidebar-icon" viewBox="0 0 24 24" fill="#0052CC"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       QA Handoff Checklists
-    </div>
+    </button>
     <div class="cf-sidebar-item">
       <svg class="cf-sidebar-icon" viewBox="0 0 24 24" fill="#5E6C84"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       Build History
@@ -272,8 +334,8 @@ $html = @"
       </div>
     </div>
 
-    <!-- 1. Release Identification -->
-    <div class="cf-section"><h2>1. Release Identification</h2></div>
+    <section id="overview-tab" class="tab-panel active">
+    <div class="cf-section"><h2>1. Release Information</h2></div>
     <table>
       <tr><th>#</th><th>Field</th><th>Value</th></tr>
       <tr><td>1</td><td>Application Name</td><td>SDS2</td></tr>
@@ -284,7 +346,15 @@ $html = @"
       <tr><td>6</td><td>Release Type</td><td>$releaseTypeStr</td></tr>
       <tr><td>7</td><td>Release Date</td><td>$ReleaseDate</td></tr>
     </table>
+    </section>
 
+    <section id="release-notes-tab" class="tab-panel">
+    <div class="cf-section"><h2>Release Notes</h2></div>
+    <p style="margin:8px 0 12px;color:#5E6C84;font-size:12px">Source: $changelogSourceHtml</p>
+    $changelogHtml
+    </section>
+
+    <section id="qa-handoff-tab" class="tab-panel">
     <!-- 2. Source & Build Information -->
     <div class="cf-section"><h2>2. Source &amp; Build Information</h2></div>
     <table>
@@ -304,7 +374,7 @@ $html = @"
       <tr><td>1</td><td>Installer Type</td><td>EXE (NSIS)</td></tr>
       <tr><td>2</td><td>Installer File Name(s)</td><td>
         <ul class="file-list">
-          $($InstallerFiles -split ",\s*" | Where-Object { $_.Trim() } | ForEach-Object { "<li>$($_.Trim())</li>" } | Out-String)
+          $installerListHtml
         </ul>
       </td></tr>
       <tr><td>3</td><td>Installer Version</td><td>$Version</td></tr>
@@ -371,9 +441,26 @@ $html = @"
       Auto-generated by GitHub Actions &middot; $ReleaseDate &middot;
       <a href="$runUrl">Run #$RunId</a>
     </div>
+    </section>
 
   </main>
 </div>
+
+<script>
+  (function () {
+    const buttons = document.querySelectorAll('.cf-sidebar-item[data-tab]');
+    const panels = document.querySelectorAll('.tab-panel');
+
+    function activate(tabId) {
+      panels.forEach(p => p.classList.toggle('active', p.id === tabId));
+      buttons.forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === tabId));
+    }
+
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => activate(btn.getAttribute('data-tab')));
+    });
+  })();
+</script>
 
 </body>
 </html>
